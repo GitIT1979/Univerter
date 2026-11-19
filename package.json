@@ -1,0 +1,72 @@
+{
+  "name": "univerter",
+  "productName": "Univerter",
+  "version": "1.0.0",
+  "description": "Univerter — универсальный конвертер документов (DOCX, PDF, MD, TXT, изображения) в виде настольного приложения",
+  "main": "main.js",
+  "author": "Univerter",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "sync": "node scripts/make-index.js Univerter.original.html src/index.html",
+    "vendor": "node scripts/vendor.js",
+    "vendor:handwriting": "node scripts/vendor-handwriting.js",
+    "check": "node scripts/check.js",
+    "dist": "npm run vendor && electron-builder --publish never",
+    "dist:win": "npm run vendor && electron-builder --win --publish never",
+    "dist:mac": "npm run vendor && electron-builder --mac --publish never",
+    "dist:linux": "npm run vendor && electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "mammoth": "1.6.0",
+    "turndown": "7.1.2",
+    "marked": "4.3.0",
+    "jszip": "3.10.1",
+    "jspdf": "2.5.1",
+    "html2canvas": "1.4.1",
+    "pdfjs-dist": "3.11.174",
+    "tesseract.js": "4.1.1",
+    "onnxruntime-web": "1.17.1",
+    "@tesseract.js-data/rus": "*",
+    "@tesseract.js-data/eng": "*"
+  },
+  "build": {
+    "appId": "ru.univerter.app",
+    "productName": "Univerter",
+    "copyright": "Univerter",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": [ "main.js", "preload.js", "lib/**", "src/**", "package.json" ],
+    "asar": true,
+    "asarUnpack": [ "src/vendor/**/*.wasm" ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        { "target": "nsis", "arch": [ "x64" ] },
+        { "target": "portable", "arch": [ "x64" ] }
+      ],
+      "artifactName": "Univerter-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "language": "1049",
+      "shortcutName": "Univerter"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "target": [ { "target": "dmg", "arch": [ "x64", "arm64" ] } ],
+      "artifactName": "Univerter-${version}-mac-${arch}.${ext}"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Office",
+      "target": [ "AppImage", "deb" ],
+      "artifactName": "Univerter-${version}-linux-${arch}.${ext}"
+    }
+  }
+}
