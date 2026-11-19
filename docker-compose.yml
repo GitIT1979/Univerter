@@ -1,0 +1,12 @@
+services:
+  univerter:
+    build: .
+    ports:
+      - "8765:8765"
+    volumes:
+      # Optional: mount custom fonts if needed
+      # - ./fonts:/usr/share/fonts/custom:ro
+    restart: unless-stopped
+    # First start downloads Indra model (~76 MB) — keep the volume if you want to cache it
+    # volumes:
+    #   - indra-cache:/root/.cache

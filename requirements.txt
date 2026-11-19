@@ -1,0 +1,10 @@
+# Univerter local engine dependencies
+# Core (required for full functionality)
+pdf2docx>=0.5.8
+
+# OCR (optional, but recommended for scanned documents and images)
+# Note: indra-ocr is officially tested on Linux and macOS; Windows support is best-effort.
+indra-ocr>=0.1.0
+
+# Testing (optional)
+# playwright>=1.40.0
