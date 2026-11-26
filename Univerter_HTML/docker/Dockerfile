@@ -22,8 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && pip install --no-cache-dir indra-ocr
 
 # Application files
-COPY univerter_server.py univerter_fidelity.py ./
-COPY Univerter.html Univerter-config.js Univerter-core.js Univerter-convert.js ./
+COPY server/univerter_server.py server/univerter_fidelity.py ./
+COPY web/Univerter.html web/Univerter-config.js web/Univerter-core.js web/Univerter-convert.js ./
 
 EXPOSE 8765
 

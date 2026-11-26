@@ -43,9 +43,9 @@ def main():
         return 1
 
     print('\n[3/3] Проверка: загрузка модели и распознавание тестовой картинки…')
-    code = subprocess.call([sys.executable, str(Path(__file__).resolve().parent / 'univerter_server.py'), '--check-indra'])
+    code = subprocess.call([sys.executable, str(Path(__file__).resolve().parent / 'server' / 'univerter_server.py'), '--check-indra'])
     if code == 0:
-        print('\n✓ Готово. Теперь запускайте:  py univerter_server.py --open')
+        print('\n✓ Готово. Теперь запускайте:  py server\\univerter_server.py --open')
     return code
 
 

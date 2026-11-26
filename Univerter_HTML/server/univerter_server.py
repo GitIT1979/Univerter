@@ -36,6 +36,7 @@ except ImportError:
     raise SystemExit('Не найден univerter_fidelity.py — он должен лежать в одной папке с univerter_server.py')
 
 HERE = Path(__file__).resolve().parent
+WEB = HERE.parent / 'web'          # статика лежит в ../web
 STATIC = {  # отдаём только эти файлы — обход каталогов невозможен
     '/': 'Univerter.html', '/Univerter.html': 'Univerter.html',
     '/Univerter-config.js': 'Univerter-config.js',
@@ -276,7 +277,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, capabilities())
         name = STATIC.get(path)
         if name:
-            f = HERE / name
+            f = WEB / name
             if not f.exists():
                 return self._json(404, {'error': f'{name} не найден рядом со скриптом'})
             return self._send(200, f.read_bytes(), MIME.get(f.suffix, 'application/octet-stream'))

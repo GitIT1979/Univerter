@@ -33,6 +33,6 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] Done.
-echo Start with:  py univerter_server.py --open
+echo Start with:  py server\univerter_server.py --open
 echo.
 pause

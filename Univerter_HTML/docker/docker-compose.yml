@@ -1,6 +1,8 @@
 services:
   univerter:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     ports:
       - "8765:8765"
     volumes:
