@@ -234,7 +234,9 @@ async function probeHelper(force) {
     try {
       const r = await fetch(url + '/health', { signal: ctl.signal, cache: 'no-store' });
       const j = await r.json();
-      if (j && j.ok) { found = Object.assign({ url }, j); break; }
+      // Ответ сервиса не должен подменять его адрес: поля из JSON накладываем на наш url,
+      // а не наоборот (иначе чужой сервис на этом порту уведёт все файлы к себе).
+      if (j && j.ok) { found = Object.assign({}, j, { url }); break; }
     } catch (e) { /* сервис не запущен */ }
     finally { clearTimeout(t); }
   }
@@ -247,10 +249,10 @@ async function convertViaHelper(file, to, index, baseName) {
   updateFileProgress(index, 20, 'Локальный движок...');
   // Для больших файлов (>20 МБ) автоматически используем быстрый режим
   const quality = (file.size > 20 * 1024 * 1024) ? 'fast' : 'high';
-  const res = await rejectOnStop(withTimeout(
-    fetch(`${helperInfo.url}/convert?to=${to}&quality=${quality}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file
-    }), 15 * 60 * 1000, 'локальный движок'));
+  const res = await rejectOnStop(fetchAbortable(
+    `${helperInfo.url}/convert?to=${to}&quality=${quality}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file },
+    15 * 60 * 1000, 'локальный движок'));
   if (!res.ok) {
     let msg = '';
     try { msg = (await res.json()).error; } catch (e) {}
@@ -983,9 +985,11 @@ function stopConversion() {
   stopBtn.disabled = true;
   progressTitle.textContent = '⏹️ Останавливаемся...';
 
-  // Ожидающие запросы к движку распознавания отклоняем сразу, не дожидаясь таймаута.
+  // Ожидающие запросы к движку распознавания отклоняем сразу, не дожидаясь таймаута,
+  // и прерываем сами HTTP-запросы, чтобы движок не продолжал работу вхолостую.
   stopWaiters.forEach(w => w());
   stopWaiters.clear();
+  abortActiveRequests();
 }
 
 /* Поиск локального движка при загрузке и периодически */

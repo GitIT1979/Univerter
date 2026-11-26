@@ -46,17 +46,38 @@ MIME = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=ut
 MAX_BYTES = 300 * 1024 * 1024
 LOCK = threading.Lock()          # LibreOffice обрабатывает файлы по одному
 CFG = {'soffice': None, 'extra_origins': [], 'timeout': 180}
-VERSION = 2
+VERSION = 3                     # 3: строгая проверка Origin (+Sec-Fetch-Site для null)
 INDRA = {'conv': None, 'state': 'idle', 'error': '', 'lock': threading.Lock()}   # idle → loading → ready | error
 OCR_LOCK = threading.Lock()                                                     # распознаём по одной странице
 
 
-def origin_ok(origin):
-    if not origin or origin == 'null':          # file:// и прямые запросы
+LOCAL_HOSTS = {'127.0.0.1', 'localhost', '::1'}
+
+
+def _host_allowed(host):
+    return (host or '').strip('[]').lower() in LOCAL_HOSTS
+
+
+def origin_ok(origin, headers=None):
+    """Разрешён ли запрос со страницы с таким Origin.
+
+    Проверяется хост целиком, а не префикс строки: иначе «http://127.0.0.1.evil.com»
+    проходил проверку как локальный и получал доступ к движку с любого сайта.
+    Origin: null приходит и от страницы, открытой как файл, и от песочного iframe —
+    второй отсекается по Sec-Fetch-Site: cross-site, который ставит сам браузер.
+    """
+    if origin in CFG['extra_origins']:
         return True
-    if origin.startswith(('http://127.0.0.1', 'http://localhost')):
+    if not origin:                              # curl, скрипты, same-origin без заголовка
         return True
-    return origin in CFG['extra_origins']
+    if origin == 'null':
+        fetch_site = ((headers.get('Sec-Fetch-Site') if headers else None) or '').lower()
+        return fetch_site in ('', 'none')
+    try:
+        parts = urllib.parse.urlsplit(origin)
+    except ValueError:
+        return False
+    return parts.scheme in ('http', 'https') and _host_allowed(parts.hostname)
 
 
 def capabilities():
@@ -247,7 +268,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
-        if origin and origin_ok(origin):
+        if origin and origin_ok(origin, self.headers):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         self.send_header('Access-Control-Allow-Private-Network', 'true')
@@ -263,7 +284,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj, ensure_ascii=False).encode('utf-8'))
 
     def do_OPTIONS(self):
-        if not origin_ok(self.headers.get('Origin')):
+        if not origin_ok(self.headers.get('Origin'), self.headers):
             return self._json(403, {'error': 'origin not allowed'})
         self._send(204, b'', extra={
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -284,7 +305,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json(404, {'error': 'not found'})
 
     def do_POST(self):
-        if not origin_ok(self.headers.get('Origin')):
+        if not origin_ok(self.headers.get('Origin'), self.headers):
             return self._json(403, {'error': 'origin not allowed'})
         url = urllib.parse.urlparse(self.path)
         if url.path not in ('/convert', '/ocr'):

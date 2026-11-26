@@ -21,9 +21,9 @@ const CONFIG = {
   orientationOkConfidence: 60,
   orientationMargin: 15,
   jpegQuality: 0.92,
-  ocrLineMinConf: 45,
-  ocrTitleMinConf: 65,
-  ocrUsefulMinWords: 4,
+  ocrLineMinConf: 45,        // строки с меньшей уверенностью Indra считаются шумом (шкала 0–100)
+  ocrTitleMinConf: 65,       // для имени файла берём только уверенно распознанный текст
+  ocrUsefulMinWords: 4,      // меньше надёжных слов — на картинке нет полезной информации
   ocrUsefulMinLetters: 20
 };
 
@@ -35,6 +35,9 @@ const KNOWN_EXTENSIONS = new Set([
 ]);
 
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+// TIFF/TIF не декодируются браузером — исключены из IMAGE_EXTS.
+// В KNOWN_EXTENSIONS их тоже нет — файлы попадут в «Игнорируется»,
+// а не в ошибку «Не удалось загрузить изображение».
 const SHEET_EXTS = ['xls', 'xlsx', 'xlsm', 'csv', 'ods'];
 const DOC_EXTS = ['docx'];
 
