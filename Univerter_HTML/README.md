@@ -8,11 +8,14 @@
 # 1. Установка (один раз)
 .\setup.bat
 
-# 2. Проверка Indra
-py server\univerter_server.py --check-indra
+# 2. Запуск — откроется браузер
+.\Univerter.bat
+```
 
-# 3. Запуск
-py server\univerter_server.py --open
+То же вручную (Windows, а также Linux/macOS с `python3` вместо `py`):
+```powershell
+py server\univerter_server.py --check-indra   # проверка Indra
+py server\univerter_server.py --open          # запуск
 ```
 
 Без локального движка (только браузер, без OCR):
@@ -35,6 +38,7 @@ python3 server/univerter_server.py --open
 Univerter_HTML/
 ├── web/                  # интерфейс (откройте Univerter.html); библиотеки — в web/vendor/
 ├── server/               # локальный движок (LibreOffice + pdf2docx + Indra)
+├── Univerter.bat         # запуск движка + браузера (Windows)
 ├── install_indra.py
 ├── setup.bat
 └── requirements.txt

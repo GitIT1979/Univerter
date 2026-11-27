@@ -43,9 +43,11 @@ Electron и Indra не связаны напрямую. Electron — тольк�
 
 ```powershell
 cd Univerter_desktop
-npm install
-npm start
+.\Univerter.bat
 ```
+
+При первом запуске файл сам выполнит `npm install`. Вручную то же самое —
+`npm install`, затем `npm start`.
 
 Откроется окно Univerter. Распознавание текста и точный DOCX↔PDF будут недоступны.
 
@@ -70,8 +72,7 @@ OCR (Indra): ✓ установлена (модель загружается в 
 
 ```powershell
 cd Univerter_desktop
-npm install
-npm start
+.\Univerter.bat
 ```
 
 В интерфейсе должна появиться зелёная строка  

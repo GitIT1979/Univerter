@@ -5,11 +5,14 @@
 
 | Папка | Что это | Запуск |
 |---|---|---|
-| `Univerter_HTML/` | браузерная версия + локальный Python-движок | `cd Univerter_HTML` → `.\setup.bat` → `py server\univerter_server.py --open` |
-| `Univerter_desktop/` | Electron-оболочка (Windows/macOS/Linux) | `cd Univerter_desktop` → `npm install` → `npm start` |
+| `Univerter_HTML/` | браузерная версия + локальный Python-движок | `cd Univerter_HTML` → `.\setup.bat` (один раз) → `.\Univerter.bat` |
+| `Univerter_desktop/` | Electron-оболочка (Windows/macOS/Linux) | `cd Univerter_desktop` → `.\Univerter.bat` |
+
+`Univerter.bat` — для Windows (двойной клик или из терминала). На macOS/Linux запускайте
+вручную, команды — в README соответствующей папки.
 
 Интерфейс один и тот же: `Univerter_HTML/web/` — источник, `Univerter_desktop/src/` — его копия.
-После правки в `web/` выполните `node scripts/sync-ui.js`.
+После правки в `web/` продублируйте её в `Univerter_desktop/src/` — проверка `load-app.js` следит за синхронностью копий.
 
 ## Что умеет
 
@@ -28,13 +31,10 @@
 ## Проверки
 
 ```bash
-node tests/load-app.js            # скрипты компилируются вместе, копии интерфейса синхронны, vendor на месте
+node tests/load-app.js            # скрипты компилируются вместе, копии интерфейса синхронны, vendor на месте, батники в CRLF
 python tests/test_server_origin.py # правила доступа локального движка и валидация входных файлов
 python tests/run_tests.py          # регрессия интерфейса в настоящем браузере (нужен playwright)
-node scripts/sync-ui.js            # синхронизировать web/ → desktop/src/
 ```
-
-CI (GitHub Actions) прогоняет первые две проверки на каждый push и pull request.
 
 ## Структура
 
@@ -42,12 +42,11 @@ CI (GitHub Actions) прогоняет первые две проверки на
 Univerter_HTML/
 ├── web/            # интерфейс: Univerter.html + config/core/convert + vendor/
 ├── server/         # univerter_server.py (HTTP), univerter_fidelity.py (LibreOffice, pdf2docx)
-└── install_indra.py, setup.bat, requirements.txt
+└── Univerter.bat, setup.bat, install_indra.py, requirements.txt
 Univerter_desktop/
 ├── main.js, preload.js, lib/server.js   # Electron-оболочка и статический сервер
 ├── src/                                 # копия web/ (интерфейс + vendor)
-└── package.json
-scripts/sync-ui.js  # web/ → desktop/src/
+└── Univerter.bat, package.json
 tests/              # load-app.js, test_server_origin.py, run_tests.py (Playwright)
 ```
 

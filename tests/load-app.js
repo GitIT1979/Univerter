@@ -69,5 +69,31 @@ for (const name of VENDOR) {
 const external = html.match(/<script[^>]+src="https?:\/\/[^"]+"/g);
 if (external) fail(`в HTML остались внешние скрипты: ${external.length}`);
 
+// 5. Батники Windows: CRLF и без BOM — иначе cmd парсит их со сбоями
+// (на LF-файле с кириллицей возобновляется посреди строки и исполняет обрывки текста)
+function collectBats(dir, out = []) {
+  for (const name of fs.readdirSync(dir)) {
+    if (name.startsWith('.') || name === 'node_modules' || name.startsWith('dist')) continue;
+    const p = path.join(dir, name);
+    if (fs.statSync(p).isDirectory()) collectBats(p, out);
+    else if (name.toLowerCase().endsWith('.bat')) out.push(p);
+  }
+  return out;
+}
+for (const p of collectBats(path.join(__dirname, '..'))) {
+  const rel = path.relative(path.join(__dirname, '..'), p);
+  const buf = fs.readFileSync(p);
+  if (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
+    fail(`${rel}: UTF-8 BOM — первая строка @echo off не сработает`);
+    continue;
+  }
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0A && (i === 0 || buf[i - 1] !== 0x0D)) {
+      fail(`${rel}: LF вместо CRLF — cmd парсит такой батник со сбоями. Пересохраните файл с CRLF`);
+      break;
+    }
+  }
+}
+
 if (failed) process.exit(1);
-console.log('✓ Скрипты компилируются вместе, порядок подключения верный, копии синхронны');
+console.log('✓ Скрипты компилируются вместе, порядок подключения верный, копии синхронны, батники в CRLF');
