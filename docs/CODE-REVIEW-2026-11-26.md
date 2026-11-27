@@ -133,7 +133,6 @@ found = Object.assign({ url }, j);   // поле url из JSON перекрыв�
 - `core.js:990-1000` — `fileCounter++` для файлов, которые потом переименует `renameByContent` → дыры в нумерации (`_001`, `_003`).
 - `core.js:108-112` — `sanitizeFileName` режет 150 символов уже с расширением: длинный заголовок теряет `.md`.
 - `univerter_server.py:299-301` — при `Content-Length: 0` отдаётся 413, уместнее 400; `log_message` отключён, диагностировать нечем.
-- `docker/Dockerfile:32` — `ENV UNIVERTER_HOST` нигде не читается (значение передаётся через `CMD`).
 
 ---
 
