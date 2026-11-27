@@ -9,6 +9,7 @@ venv/
 # Node / Electron
 node_modules/
 dist/
+dist*/
 *.log
 
 # OS

@@ -11,6 +11,7 @@
     "start": "electron .",
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",
+    "dist:win:nosign": "electron-builder --win --publish never -c.win.signAndEditExecutable=false",
     "dist:mac": "electron-builder --mac --publish never",
     "dist:linux": "electron-builder --linux --publish never"
   },
@@ -34,11 +35,15 @@
       "artifactName": "Univerter-${version}-${os}-${arch}.${ext}"
     },
     "nsis": {
+      "artifactName": "Univerter-${version}-win-${arch}-setup.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "language": "1049",
       "shortcutName": "Univerter"
+    },
+    "portable": {
+      "artifactName": "Univerter-${version}-win-${arch}-portable.${ext}"
     },
     "mac": {
       "icon": "build/icon.png",
