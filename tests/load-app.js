@@ -57,5 +57,17 @@ for (const name of ORDER.concat('Univerter.html')) {
   if (!fs.readFileSync(a).equals(fs.readFileSync(b))) fail(`${name} разошёлся между web/ и desktop/src/`);
 }
 
+// 4. Библиотеки лежат локально: приложение не должно тянуть код с CDN
+const VENDOR = ['pdf.min.js', 'pdf.worker.min.js', 'jszip.min.js', 'jspdf.umd.min.js', 'mammoth.browser.min.js',
+                'turndown.js', 'turndown-plugin-gfm.js', 'xlsx.full.min.js', 'FileSaver.min.js'];
+for (const name of VENDOR) {
+  const a = path.join(WEB, 'vendor', name);
+  const b = path.join(SRC, 'vendor', name);
+  if (!fs.existsSync(a)) { fail(`нет библиотеки vendor/${name}`); continue; }
+  if (!fs.existsSync(b) || !fs.readFileSync(a).equals(fs.readFileSync(b))) fail(`vendor/${name} разошёлся между копиями`);
+}
+const external = html.match(/<script[^>]+src="https?:\/\/[^"]+"/g);
+if (external) fail(`в HTML остались внешние скрипты: ${external.length}`);
+
 if (failed) process.exit(1);
 console.log('✓ Скрипты компилируются вместе, порядок подключения верный, копии синхронны');

@@ -6,7 +6,7 @@
 
 ```powershell
 # 1. Установка (один раз)
-py setup.bat
+.\setup.bat
 
 # 2. Проверка Indra
 py server\univerter_server.py --check-indra
@@ -41,13 +41,17 @@ docker compose up --build
 
 ```
 Univerter_HTML/
-├── web/                  # интерфейс (откройте Univerter.html)
+├── web/                  # интерфейс (откройте Univerter.html); библиотеки — в web/vendor/
 ├── server/               # локальный движок (LibreOffice + pdf2docx + Indra)
 ├── install_indra.py
 ├── setup.bat
 ├── requirements.txt
 └── docker/
 ```
+
+Библиотеки интерфейса (pdf.js, JSZip, jsPDF, mammoth, Turndown, SheetJS, FileSaver) лежат
+в `web/vendor/` — интернет для работы не нужен, CDN не используется. Список версий и лицензии —
+в `web/vendor/LICENSES.md`.
 
 ## Требования
 

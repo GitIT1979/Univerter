@@ -542,7 +542,7 @@ async function convertImage(file, targetExt, index, baseName) {
 
     if (targetExt === 'md') {
       const body = ocr.text.trim() ? ocr.text : '*[Текст не распознан]*';
-      const md = cleanupMarkdown(ocr.isTable ? `# ${baseName}\n\n${body}\n` : `# ${baseName}\n\n${body}\n`);
+      const md = cleanupMarkdown(`# ${baseName}\n\n${body}\n`);
       return { name: baseName + '.md', blob: new Blob([md], { type: 'text/markdown;charset=utf-8' }) };
     }
 

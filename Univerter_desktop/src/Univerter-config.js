@@ -5,21 +5,15 @@
    Загружается до Univerter-core.js (script defer).
    ============================================================ */
 
-const PDFJS_VERSION = '3.11.174';
-const PDFJS_BASE = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}`;
+const PDFJS_VERSION = '3.11.174';          // версия библиотек в vendor/ — менять вместе с файлами
+const PDFJS_BASE = 'vendor';               // локально: без интернета и без CDN
 
 const CONFIG = {
   renderTargetPx: 3000,
   maxCanvasSide: 8192,
   maxCanvasArea: 16777216,
   minPageTextChars: 40,
-  ocrInitTimeout: 240000,
   ocrPageTimeout: 180000,
-  orientationDetect: true,
-  orientationProbeSide: 1100,
-  orientationProbeTimeout: 60000,
-  orientationOkConfidence: 60,
-  orientationMargin: 15,
   jpegQuality: 0.92,
   ocrLineMinConf: 45,        // строки с меньшей уверенностью Indra считаются шумом (шкала 0–100)
   ocrTitleMinConf: 65,       // для имени файла берём только уверенно распознанный текст

@@ -36,8 +36,10 @@ function buildMenu() {
 }
 
 async function createWindow() {
-  const { server, port } = await startServer(path.join(__dirname, 'src'), PREFERRED_PORT);
-  srv = server; origin = `http://127.0.0.1:${port}`;
+  if (!srv) {                                  // при повторном открытии окна на macOS сервер уже работает
+    const started = await startServer(path.join(__dirname, 'src'), PREFERRED_PORT);
+    srv = started.server; origin = `http://127.0.0.1:${started.port}`;
+  }
 
   win = new BrowserWindow({
     width: 1280, height: 900, minWidth: 900, minHeight: 640, title: 'Univerter', backgroundColor: '#e8f7d4',
@@ -67,5 +69,8 @@ app.whenReady().then(createWindow).catch(err => {
   dialog.showErrorBox('Univerter не запустился', String(err && err.stack || err));
   app.quit();
 });
-app.on('window-all-closed', () => { if (srv) srv.close(); app.quit(); });
+app.on('window-all-closed', () => {
+  // на macOS приложение принято оставлять в доке; сервер при этом продолжает работать
+  if (process.platform !== 'darwin') { if (srv) srv.close(); app.quit(); }
+});
 app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });

@@ -105,6 +105,7 @@ def installed_fonts():
     if os.name == 'nt':
         try:
             ps = (
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "      # иначе 5.1 отдаёт OEM-кодировку и кириллические имена шрифтов искажаются
                 "Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts' | "
                 "Select-Object -ExpandProperty PSObject.Properties | "
                 "Where-Object { $_.Name -notmatch '^(PS|Length|Count)' } | "
@@ -222,12 +223,12 @@ def pdf_to_docx(src, out_dir, log=print, fast=False):
     cv = Converter(str(src))
     kwargs = {}
     if fast:
-        # Ускорение: отключаем тяжёлый разбор сложных таблиц и уменьшаем разрешение картинок
-        kwargs.update({
-            'parse_stream_table': False,
-            'image_quality': 60,
-            'multi_processing': True,
-        })
+        # Ускорение: отключаем тяжёлый разбор сложных таблиц (pdf2docx сам предупреждает,
+        # что при этом может пострадать раскладка). Многопроцессный режим и ключ
+        # image_quality здесь не годятся: в pdf2docx 0.5.x нет такого параметра, а
+        # multi_processing поднимает cpu_count() процессов и пишет pages-*.json
+        # в текущий каталог — для локального сервиса это лишние риски.
+        kwargs.update({'parse_stream_table': False})
         log('   режим: fast (упрощённый разбор таблиц)')
     try:
         cv.convert(str(dst), start=0, end=None, **kwargs)

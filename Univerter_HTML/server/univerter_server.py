@@ -20,6 +20,7 @@ import base64
 import importlib.util
 import json
 import os
+import shutil
 import socket
 import sys
 import tempfile
@@ -27,15 +28,19 @@ import threading
 import urllib.parse
 import urllib.request
 import webbrowser
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:      # встроенный Python не всегда кладёт каталог скрипта в sys.path
+    sys.path.insert(0, str(HERE))
 
 try:
     import univerter_fidelity as fid
 except ImportError:
     raise SystemExit('Не найден univerter_fidelity.py — он должен лежать в одной папке с univerter_server.py')
 
-HERE = Path(__file__).resolve().parent
 WEB = HERE.parent / 'web'          # статика лежит в ../web
 STATIC = {  # отдаём только эти файлы — обход каталогов невозможен
     '/': 'Univerter.html', '/Univerter.html': 'Univerter.html',
@@ -45,8 +50,8 @@ STATIC = {  # отдаём только эти файлы — обход кат�
 MIME = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8'}
 MAX_BYTES = 300 * 1024 * 1024
 LOCK = threading.Lock()          # LibreOffice обрабатывает файлы по одному
-CFG = {'soffice': None, 'extra_origins': [], 'timeout': 180}
-VERSION = 3                     # 3: строгая проверка Origin (+Sec-Fetch-Site для null)
+CFG = {'soffice': None, 'extra_origins': [], 'timeout': 180, 'verbose': False}
+VERSION = 4                     # 4: потоковая загрузка + структурная проверка DOCX/PDF
 INDRA = {'conv': None, 'state': 'idle', 'error': '', 'lock': threading.Lock()}   # idle → loading → ready | error
 OCR_LOCK = threading.Lock()                                                     # распознаём по одной странице
 
@@ -91,8 +96,34 @@ def capabilities():
     }
 
 
-def convert(to, data, quality='high'):
-    """to='pdf' (вход DOCX) или to='docx' (вход PDF). quality='high'|'fast'. Возвращает (bytes, log)."""
+def _validate_docx(path):
+    """Структурная проверка: zip + word/document.xml.
+
+    Одного префикса «PK» мало: LibreOffice молча делает из любого мусора
+    пустой PDF, и пользователь получает «✓ Готово» с пустым файлом.
+    """
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = set(z.namelist())
+    except (zipfile.BadZipFile, OSError) as e:
+        raise BadInput(f'Файл повреждён или это не DOCX ({e})')
+    if 'word/document.xml' not in names:
+        raise BadInput('Это не DOCX: внутри архива нет word/document.xml')
+
+
+def _validate_pdf(path):
+    with open(path, 'rb') as f:
+        head = f.read(1024)
+    if b'%PDF-' not in head:
+        raise BadInput('Файл не похож на PDF')
+
+
+def convert(to, src, quality='high'):
+    """to='pdf' (вход DOCX) или to='docx' (вход PDF). src — путь к загруженному файлу.
+
+    Временная папка принадлежит вызывающему: так тело запроса пишется на диск
+    потоком и не держится в памяти целиком.
+    """
     if to == 'pdf':
         if not CFG['soffice']:
             raise RuntimeError(
@@ -100,27 +131,21 @@ def convert(to, data, quality='high'):
                 'Установите его с https://www.libreoffice.org или укажите путь: '
                 'py univerter_server.py --soffice "C:\\Program Files\\LibreOffice\\program\\soffice.exe"'
             )
-        if data[:2] != b'PK':
-            raise RuntimeError('Файл не похож на DOCX')
+        _validate_docx(src)
     elif to == 'docx':
-        if b'%PDF-' not in data[:1024]:
-            raise RuntimeError('Файл не похож на PDF')
+        _validate_pdf(src)
     else:
         raise RuntimeError('Неизвестное направление')
 
     log = []
-    with tempfile.TemporaryDirectory(prefix='univerter_srv_') as td:
-        td = Path(td)
-        src = td / ('input.docx' if to == 'pdf' else 'input.pdf')
-        src.write_bytes(data)
-        out = td / 'out'
-        with LOCK:
-            if to == 'pdf':
-                res = fid.docx_to_pdf(src, out, CFG['soffice'], CFG['timeout'],
-                                      log=log.append, quality=quality)
-            else:
-                res = fid.pdf_to_docx(src, out, log=log.append, fast=(quality == 'fast'))
-        return res.read_bytes(), [l.strip() for l in log if l.strip()]
+    out = src.parent / 'out'
+    with LOCK:
+        if to == 'pdf':
+            res = fid.docx_to_pdf(src, out, CFG['soffice'], CFG['timeout'],
+                                  log=log.append, quality=quality)
+        else:
+            res = fid.pdf_to_docx(src, out, log=log.append, fast=(quality == 'fast'))
+    return res.read_bytes(), [l.strip() for l in log if l.strip()]
 
 
 # ------------------------------------------------------------------ OCR (Indra)
@@ -257,11 +282,16 @@ def check_indra():
     return 2
 
 
+class BadInput(Exception):
+    """Файл не тот, за который себя выдаёт. Отдаём 422, а не 500."""
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = 'UniverterLocal/1'
 
     def log_message(self, fmt, *args):
-        pass
+        if CFG['verbose']:
+            sys.stderr.write(f'{self.address_string()} {fmt % args}\n')
 
     def _send(self, code, body=b'', ctype='application/json; charset=utf-8', extra=None):
         origin = self.headers.get('Origin')
@@ -302,6 +332,14 @@ class Handler(BaseHTTPRequestHandler):
             if not f.exists():
                 return self._json(404, {'error': f'{name} не найден рядом со скриптом'})
             return self._send(200, f.read_bytes(), MIME.get(f.suffix, 'application/octet-stream'))
+        if path.startswith('/vendor/'):                 # локальные библиотеки интерфейса
+            name = path[len('/vendor/'):]
+            if not name or name.startswith('.') or '/' in name or '\\' in name:
+                return self._json(404, {'error': 'not found'})
+            f = WEB / 'vendor' / name
+            if not f.is_file():
+                return self._json(404, {'error': 'not found'})
+            return self._send(200, f.read_bytes(), MIME.get(f.suffix, 'application/octet-stream'))
         self._json(404, {'error': 'not found'})
 
     def do_POST(self):
@@ -318,32 +356,54 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get('Content-Length', '0'))
         except ValueError:
             length = 0
-        if length <= 0 or length > MAX_BYTES:
-            return self._json(413, {'error': f'размер файла должен быть от 1 байта до {MAX_BYTES // 1048576} МБ'})
-        data = self.rfile.read(length)
-        if url.path == '/ocr':
-            if importlib.util.find_spec('indra_ocr') is None:
-                return self._json(503, {
-                    'error': 'Indra не установлена. Выполните: py install_indra.py',
-                    'code': 'indra_missing',
-                    'hint': 'После установки перезапустите univerter_server.py. На Windows поддержка best-effort.'
-                })
-            try:
-                return self._json(200, ocr_image_bytes(data))
-            except Exception as e:
-                err = f'{type(e).__name__}: {e}'
-                hint = 'Запустите: py univerter_server.py --check-indra и пришлите полный вывод.'
-                if 'onnx' in err.lower() or 'cuda' in err.lower() or 'dll' in err.lower():
-                    hint += ' На Windows часто помогает установка Visual C++ Redistributable или использование Linux/macOS.'
-                return self._json(500, {
-                    'error': err[:400],
-                    'code': 'indra_failed',
-                    'hint': hint
-                })
+        if length <= 0:
+            return self._json(400, {'error': 'пустой запрос: нужен файл в теле'})
+        if length > MAX_BYTES:
+            return self._json(413, {'error': f'файл больше {MAX_BYTES // 1048576} МБ'})
+
+        td = tempfile.mkdtemp(prefix='univerter_req_')
         try:
-            body, log = convert(to, data, quality=quality)
-        except Exception as e:
-            return self._json(500, {'error': str(e)[:400]})
+            src = Path(td) / ('input.docx' if to == 'pdf' else 'input.pdf')
+            remaining = length
+            with open(src, 'wb') as f:                    # пишем на диск потоком, а не держим 300 МБ в RAM
+                while remaining > 0:
+                    chunk = self.rfile.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    remaining -= len(chunk)
+            if remaining:
+                return self._json(400, {'error': 'загрузка прервана: получено меньше заявленного размера'})
+
+            if url.path == '/ocr':
+                if importlib.util.find_spec('indra_ocr') is None:
+                    return self._json(503, {
+                        'error': 'Indra не установлена. Выполните: py install_indra.py',
+                        'code': 'indra_missing',
+                        'hint': 'После установки перезапустите univerter_server.py. На Windows поддержка best-effort.'
+                    })
+                try:
+                    return self._json(200, ocr_image_bytes(src.read_bytes()))
+                except Exception as e:
+                    err = f'{type(e).__name__}: {e}'
+                    hint = 'Запустите: py univerter_server.py --check-indra и пришлите полный вывод.'
+                    if 'onnx' in err.lower() or 'cuda' in err.lower() or 'dll' in err.lower():
+                        hint += ' На Windows часто помогает установка Visual C++ Redistributable или использование Linux/macOS.'
+                    return self._json(500, {
+                        'error': err[:400],
+                        'code': 'indra_failed',
+                        'hint': hint
+                    })
+
+            try:
+                body, log = convert(to, src, quality=quality)
+            except BadInput as e:
+                return self._json(422, {'error': str(e)[:400], 'code': 'bad_input'})
+            except Exception as e:
+                return self._json(500, {'error': str(e)[:400]})
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
         warn = urllib.parse.quote(json.dumps(log, ensure_ascii=False))[:6000]
         ctype = 'application/pdf' if to == 'pdf' else \
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -392,6 +452,7 @@ def main():
     ap.add_argument('--allow-origin', action='append', default=[],
                     help='дополнительный разрешённый origin (если страница Univerter открыта не локально)')
     ap.add_argument('--open', action='store_true', help='открыть Univerter в браузере')
+    ap.add_argument('--verbose', action='store_true', help='печатать каждый запрос (диагностика)')
     ap.add_argument('--check-indra', action='store_true', help='проверить установку Indra (скачает модель при первом запуске) и выйти')
     a = ap.parse_args()
 
@@ -400,6 +461,7 @@ def main():
     CFG['soffice'] = fid.find_soffice(a.soffice)
     CFG['timeout'] = a.timeout
     CFG['extra_origins'] = a.allow_origin
+    CFG['verbose'] = a.verbose
     caps = capabilities()
 
     try:

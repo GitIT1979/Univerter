@@ -5,8 +5,10 @@
    xls/xlsx/xlsm/csv/ods, изображения (jpg/jpeg/png/gif/bmp/webp).
    .doc, .rtf, .tiff/.tif — не поддерживаются.
 
-   ВНИМАНИЕ: OCR инициализируется лениво; stopConversion терминирует
-   воркер и отменяет загрузку моделей, если она ещё идёт.
+   ВНИМАНИЕ: OCR инициализируется лениво на стороне локального движка.
+   stopConversion прерывает HTTP-запросы к движку (AbortController) и отклоняет
+   ожидающие промисы, но уже начатую страницу движок доводит сам:
+   отменить чужой процесс из браузера нельзя.
    ============================================================ */
 
 /* Константы (CONFIG, формат-правила, расширения) объявлены в Univerter-config.js.
@@ -14,7 +16,7 @@
    `const` с тем же именем — SyntaxError на весь файл. Не дублировать. */
 
 if (typeof pdfjsLib !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.min.js`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/pdf.worker.min.js`;
 }
 
 const $ = (id) => document.getElementById(id);
@@ -42,7 +44,6 @@ let filesToProcess = [];
 let convertedFiles = [];
 let isProcessing = false;
 let stopRequested = false;
-let fileCounter = 1;
 let rebuildSeq = 0;
 const stopWaiters = new Set();
 
@@ -61,9 +62,12 @@ function xmlEscape(s) {
 }
 function sanitizeFileName(name) {
   let clean = String(name).replace(/[\\/:*?"<>|\u0000-\u001F]/g, '_').replace(/^\.+|\s+$/g, '').trim();
-  clean = clean.replace(/[\s.]+(\.[^.]+)$/, '$1');                                       // «имя .md» → «имя.md»
-  if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?=\.|$)/i.test(clean)) clean = '_' + clean;   // зарезервированные имена Windows
-  return (clean || 'file').slice(0, 150);
+  clean = clean.replace(/[\s.]+(\.[^.]+)$/, '$1');
+  if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?=\.|$)/i.test(clean)) clean = '_' + clean;
+  const full = clean || 'file';
+  if (full.length <= 150) return full;
+  const ext = (/(\.[A-Za-z0-9]{1,8})$/.exec(full) || ['', ''])[1];   // расширение не режем
+  return full.slice(0, 150 - ext.length) + ext;
 }
 function formatBytes(n) {
   if (!n && n !== 0) return 'неизвестно';
@@ -854,9 +858,11 @@ async function getDocText(file, ext) {
   if (file._docText && file._docText.trim().length >= 15) return { text: file._docText, meta: { headings: file._docHeadings || [] } };
 
   if (['txt', 'md', 'markdown'].includes(ext)) {
+    // Крупный файл читаем не целиком, но с тем же откатом на cp1251 — иначе
+    // русский txt в 1251 давал мусор и автоимя по содержимому не определялось.
     const text = file.size <= 2097152
       ? await readTextSmart(file)
-      : new TextDecoder('utf-8').decode(await file.slice(0, 65536).arrayBuffer());
+      : await readTextSmart(file.slice(0, 262144));
     return { text: text.slice(0, DOC_TEXT_MAX), meta: {} };
   }
 
@@ -960,7 +966,7 @@ async function renameByContent(i, item) {
   }
 }
 
-function applySmartNaming(file, targetExt) {
+function applySmartNaming(file, targetExt, number) {
   const baseName = getBaseName(file.name);
   if (!renameFilesCheckbox.checked) return { name: sanitizeFileName(baseName) + '.' + targetExt, method: 'extension-only' };
   if (hasMeaningfulName(file.name)) return { name: sanitizeFileName(baseName) + '.' + targetExt, method: 'kept' };
@@ -970,19 +976,19 @@ function applySmartNaming(file, targetExt) {
   const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
   const newName = template
     .replace(/{дата}/g, dateStr)
-    .replace(/{номер}/g, String(fileCounter).padStart(3, '0'))
+    .replace(/{номер}/g, String(number).padStart(3, '0'))
     .replace(/{тип}/g, targetExt.toUpperCase())
     .replace(/{приложение}/g, getBaseName(file.name));
-  fileCounter++;
   return { name: sanitizeFileName(newName) + '.' + targetExt, method: 'template' };
 }
 
 function uniqueName(name, taken) {
   if (!taken.has(name)) { taken.add(name); return name; }
   const base = getBaseName(name);
-  const ext = getExtension(name) || name.split('.').pop();
+  const ext = getExtension(name) || '';
+  const tail = ext ? '.' + ext : '';
   let i = 2, candidate;
-  do { candidate = `${base}_${i}.${ext}`; i++; } while (taken.has(candidate));
+  do { candidate = `${base}_${i}${tail}`; i++; } while (taken.has(candidate));
   taken.add(candidate);
   return candidate;
 }
@@ -1011,7 +1017,6 @@ async function rebuildFileList() {
   filesToProcess = [];
   convertedFiles = [];
   fileList.innerHTML = '';
-  fileCounter = 1;
   overallProgress.classList.remove('active');
   progressBarFill.style.width = '0%';
   progressPercent.textContent = '0%';
@@ -1039,7 +1044,7 @@ async function rebuildFileList() {
     }
 
     const finalExt = action === 'convert' ? rules.targetExt : ext;
-    const naming = applySmartNaming(file, finalExt);
+    const naming = applySmartNaming(file, finalExt, filesToProcess.length + 1);
     naming.name = uniqueName(naming.name, taken);
 
     const index = filesToProcess.length;
@@ -1361,43 +1366,50 @@ function ocrEngineReady() { return typeof helperInfo !== 'undefined' && !!helper
 /* Агрессивная склейка слов: части слова соединяются даже если между ними большие пробелы.
    «С у м м ы» → «Суммы», «2 0 2 4» → «2024», а также короткие фрагменты разрядки. */
 function normalizeSpacing(text) {
-  const raw = String(text == null ? '' : text).replace(/\u00A0/g, ' ').replace(/[ \t]+/g, ' ').trim();
-  if (!raw) return '';
-  const toks = raw.split(' ').filter(Boolean);
-  if (toks.length < 2) return raw;
+  const src = String(text == null ? '' : text).replace(/\u00A0/g, ' ').replace(/[\t\r\n]+/g, ' ').trim();
+  if (!src) return '';
 
   const isLetter = t => /^\p{L}$/u.test(t);
   const isDigit = t => /^\d$/.test(t);
   const isShort = t => t.length <= 2 && /^[\p{L}\d]+$/u.test(t);
 
-  const out = [];
-  let i = 0;
-  while (i < toks.length) {
-    // Склеиваем последовательность одиночных букв или цифр (от 2 штук)
-    if (isLetter(toks[i]) || isDigit(toks[i])) {
-      const kind = isLetter(toks[i]) ? isLetter : isDigit;
-      let j = i;
-      while (j < toks.length && kind(toks[j])) j++;
-      if (j - i >= 2) {
-        out.push(toks.slice(i, j).join(''));
-        i = j;
-        continue;
+  /* В разрядке «С у м м ы  п р о п и с ь ю» одиночный пробел — внутри слова,
+     двойной — между словами. Склейку делаем внутри куска, разрезанного по 2+ пробелам:
+     иначе двойные пробелы схлопываются раньше и границы слов теряются. */
+  const collapse = (part) => {
+    const toks = part.split(' ').filter(Boolean);
+    if (toks.length < 2) return toks.join(' ');
+    const out = [];
+    let i = 0;
+    while (i < toks.length) {
+      // Склеиваем последовательность одиночных букв или цифр (от 2 штук)
+      if (isLetter(toks[i]) || isDigit(toks[i])) {
+        const kind = isLetter(toks[i]) ? isLetter : isDigit;
+        let j = i;
+        while (j < toks.length && kind(toks[j])) j++;
+        if (j - i >= 2) {
+          out.push(toks.slice(i, j).join(''));
+          i = j;
+          continue;
+        }
       }
-    }
-    // Склеиваем 3+ коротких фрагмента подряд (разрядка)
-    if (isShort(toks[i])) {
-      let j = i, shortCount = 0;
-      while (j < toks.length && isShort(toks[j])) { shortCount++; j++; }
-      if (shortCount >= 3) {
-        out.push(toks.slice(i, j).join(''));
-        i = j;
-        continue;
+      // Склеиваем 3+ коротких фрагмента подряд (разрядка)
+      if (isShort(toks[i])) {
+        let j = i, shortCount = 0;
+        while (j < toks.length && isShort(toks[j])) { shortCount++; j++; }
+        if (shortCount >= 3) {
+          out.push(toks.slice(i, j).join(''));
+          i = j;
+          continue;
+        }
       }
+      out.push(toks[i]);
+      i++;
     }
-    out.push(toks[i]);
-    i++;
-  }
-  return out.join(' ');
+    return out.join(' ');
+  };
+
+  return src.split(/ {2,}/).map(collapse).filter(Boolean).join(' ');
 }
 
 /* Склеивает фрагменты одной строки по вертикальной координате, даже если между ними большой горизонтальный промежуток */
@@ -1464,8 +1476,13 @@ async function indraRecognize(canvas) {
 /* Разбор ответа Indra: строки с уверенностью и разметкой → очищенный текст, заголовки, слова для текстового слоя */
 function formatIndraResult(res) {
   // Сначала склеиваем фрагменты одной строки, даже если между ними большой промежуток
-  const rawLines = mergeDistantLineParts(res.lines || []);
-  const lines = rawLines.map(l => ({ box: normalizeBox(l.box), conf: Number(l.conf), text: normalizeSpacing(l.text) }))
+  // Рамки приводим к [x0, y0, x1, y1] ДО склейки: mergeDistantLineParts считает
+  // box[2] правым краем, поэтому для формата [x, y, ширина, высота] рамка ломалась.
+  const preNormalized = (res.lines || [])
+    .map(l => ({ box: normalizeBox(l.box), conf: l.conf, text: l.text }))
+    .filter(l => l.box);
+  const rawLines = mergeDistantLineParts(preNormalized);
+  const lines = rawLines.map(l => ({ box: l.box, conf: Number(l.conf), text: normalizeSpacing(l.text) }))
     .filter(l => l.text && l.box);
   for (const l of lines) if (!Number.isFinite(l.conf)) l.conf = 100;
 
@@ -1555,7 +1572,7 @@ async function ocrCanvas(sourceCanvas, onProgress) {
   try {
     const st = formatIndraResult(res);
     report(100, 'Готово');
-    return { text: st.text, isTable: false, columns: 0, confidence: st.quality.avgConf, angle: res.rotation || 0,
+    return { text: st.text, confidence: st.quality.avgConf, angle: res.rotation || 0,
              wordLines: st.wordLines, quality: st.quality, titleText: st.titleText, headings: st.headings,
              canvas: display, width: display.width, height: display.height };
   } catch (e) {
@@ -1640,8 +1657,13 @@ async function renderPageAdaptive(pdf, pageNum, targetMaxSize = CONFIG.renderTar
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport, background: '#ffffff' }).promise;
-    return canvas;
+    try {
+      await page.render({ canvasContext: ctx, viewport, background: '#ffffff' }).promise;
+      return canvas;
+    } catch (e) {                       // иначе полный бэкенг canvas ждёт GC (до ~50 МБ на страницу)
+      releaseCanvas(canvas);
+      throw e;
+    }
   } finally { page.cleanup(); }
 }
 
@@ -2191,12 +2213,21 @@ function wrapText(text, size, maxWidth, bold) {
     if (measureText(test, size, bold) <= maxWidth) { line = test; continue; }
     if (line) { lines.push(line); line = ''; }
     if (measureText(word, size, bold) <= maxWidth) { line = word; continue; }
-    let chunk = '';
-    for (const ch of word) {
-      if (chunk && measureText(chunk + ch, size, bold) > maxWidth) { lines.push(chunk); chunk = ch; }
-      else chunk += ch;
+    // Слово шире строки: режем бинарным поиском по длине префикса. Посимвольное
+    // накопление давало O(n²) вызовов measureText и вешало вкладку на длинных
+    // токенах без пробелов (base64, URL).
+    let rest = word;
+    while (rest) {
+      if (measureText(rest, size, bold) <= maxWidth) { line = rest; break; }
+      let lo = 1, hi = rest.length;                    // наибольший влезающий префикс
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (measureText(rest.slice(0, mid), size, bold) <= maxWidth) lo = mid; else hi = mid - 1;
+      }
+      const take = Math.max(1, lo);
+      lines.push(rest.slice(0, take));
+      rest = rest.slice(take);
     }
-    line = chunk;
   }
   if (line) lines.push(line);
   return lines.length ? lines : [''];
@@ -2255,16 +2286,23 @@ function layoutTablePages(sheets, { landscape = true, margin = 28, fontSize = 8 
     y += 22;
     if (!cols) { pushPage(false); continue; }
 
+    // Ширины — по выборке строк: на таблице в десятки тысяч строк полный проход
+    // (rows × cols вызовов measureText) подвешивал вкладку на минуты.
+    const SAMPLE_LIMIT = 400;
+    const step = Math.max(1, Math.ceil(rows.length / SAMPLE_LIMIT));
+    const sampleRows = rows.length > SAMPLE_LIMIT ? rows.filter((_, i) => i === 0 || i % step === 0) : rows;
     const widths = [];
     for (let c = 0; c < cols; c++) {
       let w = 30;
-      for (const row of rows)
+      for (const row of sampleRows)
         w = Math.max(w, Math.min(measureText(String(row[c] ?? ''), fontSize, false) + pad * 2, 260));
       widths.push(w);
     }
     const totalW = widths.reduce((a, b) => a + b, 0);
     const k = totalW > maxW ? maxW / totalW : 1;
-    const colW = widths.map(w => Math.max(24, w * k));
+    let colW = widths.map(w => Math.max(24, w * k));
+    const sumColW = colW.reduce((a, b) => a + b, 0);
+    if (sumColW > maxW) colW = colW.map(w => w * (maxW / sumColW));   // пол 24 pt не должен выносить таблицу за поля
 
     if (rows.length) {
       const cellLines = [];
@@ -2415,7 +2453,6 @@ function clearAll() {
   fileInput.value = ''; folderInput.value = '';
   overallProgress.classList.remove('active');
   progressBarFill.style.width = '0%';
-  fileCounter = 1;
   convertBtn.disabled = true;
 }
 

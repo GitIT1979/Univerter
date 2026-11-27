@@ -36,6 +36,9 @@ Electron и Indra не связаны напрямую. Electron — тольк�
 
 ## Запуск приложения
 
+Интерфейс и библиотеки лежат в `src/` этого проекта (копия `Univerter_HTML/web`).
+Сеть для работы не нужна: pdf.js, JSZip, jsPDF, mammoth, Turndown и SheetJS лежат в `src/vendor/`.
+
 ### Вариант A — только интерфейс (без OCR)
 
 ```powershell
@@ -50,11 +53,11 @@ npm start
 
 Нужны **два окна**.
 
-**Окно 1 — Python-сервер с Indra** (папка `Univerter`):
+**Окно 1 — Python-сервер с Indra** (папка `Univerter_HTML`):
 
 ```powershell
-cd Univerter
-py setup.bat
+cd Univerter_HTML
+.\setup.bat
 py server\univerter_server.py
 ```
 
@@ -77,7 +80,7 @@ npm start
 ### Проверка Indra
 
 ```powershell
-cd Univerter
+cd Univerter_HTML
 py server\univerter_server.py --check-indra
 ```
 

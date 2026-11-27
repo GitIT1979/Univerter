@@ -21,12 +21,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && pip install --no-cache-dir indra-ocr
 
-# Application files
-COPY server/univerter_server.py server/univerter_fidelity.py ./
-COPY web/Univerter.html web/Univerter-config.js web/Univerter-core.js web/Univerter-convert.js ./
+# Раскладка как в репозитории: сервер ищет статику в ../web относительно себя
+COPY server/ ./server/
+COPY web/ ./web/
 
 EXPOSE 8765
 
-# Bind to 0.0.0.0 so the host can reach the container
-ENV UNIVERTER_HOST=0.0.0.0
-CMD ["python", "univerter_server.py", "--host", "0.0.0.0", "--port", "8765"]
+# Слушаем 0.0.0.0, чтобы контейнер был доступен с хоста
+CMD ["python", "server/univerter_server.py", "--host", "0.0.0.0", "--port", "8765"]

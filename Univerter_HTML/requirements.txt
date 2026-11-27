@@ -1,10 +1,16 @@
-# Univerter local engine dependencies
-# Core (required for full functionality)
-pdf2docx>=0.5.8
+# Зависимости локального движка Univerter.
+# Ставится через setup.bat (Windows) или `pip install -r requirements.txt`.
 
-# OCR (optional, but recommended for scanned documents and images)
-# Note: indra-ocr is officially tested on Linux and macOS; Windows support is best-effort.
-indra-ocr>=0.1.0
+# Ядро: PDF -> DOCX (LibreOffice для DOCX -> PDF ставится отдельно).
+# 0.5.13 — проверенная версия: в других ветках меняется набор параметров конвертера.
+pdf2docx>=0.5.13,<0.6
 
-# Testing (optional)
+# OCR (необязательно). Ставится отдельно, потому что падение этой зависимости
+# не должно ломать установку остального:
+#     py install_indra.py
+# В Docker образ indra-ocr ставится явной командой в docker/Dockerfile.
+# Авторы Indra тестируют Linux и macOS; на Windows поддержка best-effort.
+# indra-ocr>=0.1.0
+
+# Тесты интерфейса (необязательно):
 # playwright>=1.40.0
