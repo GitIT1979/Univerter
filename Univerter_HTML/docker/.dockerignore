@@ -1,9 +1,0 @@
-__pycache__
-*.pyc
-tests
-*.md
-setup.*
-install_indra.*
-LICENSE*
-.git
-.gitignore

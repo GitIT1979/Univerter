@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-echo === Univerter: install without Docker ===
+echo === Univerter: install dependencies ===
 echo.
 
 where py >nul 2>&1

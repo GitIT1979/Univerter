@@ -8,7 +8,6 @@ pdf2docx>=0.5.13,<0.6
 # OCR (необязательно). Ставится отдельно, потому что падение этой зависимости
 # не должно ломать установку остального:
 #     py install_indra.py
-# В Docker образ indra-ocr ставится явной командой в docker/Dockerfile.
 # Авторы Indra тестируют Linux и macOS; на Windows поддержка best-effort.
 # indra-ocr>=0.1.0
 

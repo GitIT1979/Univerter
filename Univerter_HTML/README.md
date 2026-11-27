@@ -29,14 +29,6 @@ python3 server/univerter_server.py --check-indra
 python3 server/univerter_server.py --open
 ```
 
-## Docker
-
-```bash
-cd docker
-docker compose up --build
-# открыть http://127.0.0.1:8765/
-```
-
 ## Структура
 
 ```
@@ -45,8 +37,7 @@ Univerter_HTML/
 ├── server/               # локальный движок (LibreOffice + pdf2docx + Indra)
 ├── install_indra.py
 ├── setup.bat
-├── requirements.txt
-└── docker/
+└── requirements.txt
 ```
 
 Библиотеки интерфейса (pdf.js, JSZip, jsPDF, mammoth, Turndown, SheetJS, FileSaver) лежат

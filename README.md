@@ -42,7 +42,6 @@ CI (GitHub Actions) прогоняет первые две проверки на
 Univerter_HTML/
 ├── web/            # интерфейс: Univerter.html + config/core/convert + vendor/
 ├── server/         # univerter_server.py (HTTP), univerter_fidelity.py (LibreOffice, pdf2docx)
-├── docker/         # образ с LibreOffice и зависимостями
 └── install_indra.py, setup.bat, requirements.txt
 Univerter_desktop/
 ├── main.js, preload.js, lib/server.js   # Electron-оболочка и статический сервер

@@ -446,7 +446,7 @@ def main():
             pass
     ap = argparse.ArgumentParser(description='Локальный движок Univerter (LibreOffice + pdf2docx)')
     ap.add_argument('--port', type=int, default=8765)
-    ap.add_argument('--host', default='127.0.0.1', help='адрес привязки (0.0.0.0 для Docker)')
+    ap.add_argument('--host', default='127.0.0.1', help='адрес привязки (0.0.0.0 — доступ с других машин)')
     ap.add_argument('--soffice', help='путь к soffice, если его нет в PATH')
     ap.add_argument('--timeout', type=int, default=180, help='таймаут LibreOffice на файл, с')
     ap.add_argument('--allow-origin', action='append', default=[],
