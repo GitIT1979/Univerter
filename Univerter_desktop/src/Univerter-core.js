@@ -2563,6 +2563,8 @@ function selectMode(radio) {
   currentModeEl.innerHTML = `Выбран режим: <strong>${escapeHtml(label)}</strong>`;
   currentModeEl.classList.remove('flash'); void currentModeEl.offsetWidth; currentModeEl.classList.add('flash'); // мгновенная подсветка смены
   if (allFiles.length) rebuildFileList();
+  const fp = document.getElementById('folderPreview');
+  if (fp && !fp.hidden) showFolderPreview(allFiles);         // сводка превью обязана считать по новому режиму
 }
 
 /* change — для клавиатуры; click — для мыши */
