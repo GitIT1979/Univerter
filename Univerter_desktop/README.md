@@ -53,26 +53,33 @@ cd Univerter_desktop
 
 ### Вариант B — полный режим (с Indra)
 
-Нужны **два окна**.
+Один файл: `Univerter.bat` запускает интерфейс и сам поднимает движок.
+
+```powershell
+cd Univerter_desktop
+.\Univerter.bat
+```
+
+Если рядом (в `..\Univerter_HTML`) есть движок и он ещё не работает, лаунчер стартует его
+свёрнутым окном **«Univerter engine (Python)»** — недостающие пакеты (`pdf2docx`, `indra-ocr`)
+движок поставит сам при первом запуске, затем скачает веса. Остановить движок: закрыть это
+окно на панели задач. Повторный запуск лаунчера видит уже работающий движок и не дублирует его.
+Если Python или `Univerter_HTML` не найдены — интерфейс запустится без OCR, как в варианте A.
+
+Вариант вручную (два окна) — если нужно запустить движок отдельно:
 
 **Окно 1 — Python-сервер с Indra** (папка `Univerter_HTML`):
 
 ```powershell
 cd Univerter_HTML
-.\setup.bat
 py server\univerter_server.py
-```
-
-Дождитесь:
-```
-OCR (Indra): ✓ установлена (модель загружается в фоне)
 ```
 
 **Окно 2 — Electron**:
 
 ```powershell
 cd Univerter_desktop
-.\Univerter.bat
+npm start
 ```
 
 В интерфейсе должна появиться зелёная строка  
@@ -131,6 +138,6 @@ Electron-builder распаковывает в кэш архив с символ
 |---------|-------------|
 | Окно Electron не открывается | `npm install` ещё раз, проверьте Node.js 20+ |
 | «Локальный движок не найден» | Запустите Python-сервер из папки `Univerter` |
-| «OCR (Indra) ✗» | В папке `Univerter` выполните `py install_indra.py` и перезапустите сервер |
+| «OCR (Indra) ✗» | Перезапустите движок — он сам поставит `indra-ocr`; проверка: `py server\univerter_server.py --check-indra` |
 | Indra не загружается | `py server\univerter_server.py --check-indra` и пришлите вывод |
 | Порт 8765 занят | Запустите сервер с `--port 8766` и обновите страницу в Electron |

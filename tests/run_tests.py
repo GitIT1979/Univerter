@@ -313,7 +313,8 @@ with tempfile.TemporaryDirectory() as tmp, sync_playwright() as pw:
             'sys.argv = ["univerter_server.py", "--port", sys.argv[1]]\n'
             f'runpy.run_path(r"{SERVER_PY}", run_name="__main__")\n',
             encoding='utf-8')
-        env = dict(**__import__('os').environ, UNIVERTER_FAKE_INDRA_DATA=str(dpath))
+        env = dict(**__import__('os').environ, UNIVERTER_FAKE_INDRA_DATA=str(dpath),
+                   UNIVERTER_NO_AUTOINSTALL='1')          # подставная Indra на sys.path — pip не нужен
         srv = subprocess.Popen([sys.executable, str(launcher), str(port)], env=env, cwd=str(tmp),
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
@@ -383,6 +384,27 @@ with tempfile.TemporaryDirectory() as tmp, sync_playwright() as pw:
             p4.close()
         finally:
             srv.terminate()
+
+    # ------------------------------------------------------------------ 13
+    section('13. Превью содержимого выбранной папки')
+    page.evaluate("clearAll()")
+    page.click('.mode-option:has(.mode-title:text-is("Все в MD"))')
+    fdir = tmp / 'Папка теста'; (fdir / 'sub').mkdir(parents=True)
+    (fdir / 'note.md').write_text('# привет', encoding='utf-8')
+    (fdir / 'pic.png').write_bytes(make_png(4, 4))
+    (fdir / 'sub' / 'doc.pdf').write_bytes(b'%PDF-1.4\n1 0 obj\n%%EOF\n')
+    (fdir / 'мусор.xyz').write_bytes(b'??')
+    page.set_input_files('#folderInput', str(fdir))
+    page.wait_for_timeout(600)
+    pv = page.inner_text('#folderPreview')
+    shown = not page.evaluate("document.getElementById('folderPreview').hidden")
+    check('после выбора папки видно её содержимое', shown and 'Папка теста' in pv and 'файлов: 4' in pv, pv[:150])
+    check('в превью пути внутри папки (включая подпапки)',
+          all(x in pv for x in ['note.md', 'sub/doc.pdf', 'pic.png', 'мусор.xyz']), pv[:300])
+    check('сводка по действиям: 2 в конвертацию, 1 копия, 1 без расширения',
+          'в конвертацию: 2' in pv and 'копирование: 1' in pv and 'расширение проверится по содержимому: 1' in pv, pv[:300])
+    page.evaluate("clearAll()")
+    check('очистка скрывает превью', page.evaluate("document.getElementById('folderPreview').hidden"))
 
     check('ошибок JavaScript на странице не было', not [e for e in page_errors if not e.startswith('DIALOG')], str(page_errors))
     browser.close()

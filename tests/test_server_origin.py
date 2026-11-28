@@ -81,6 +81,7 @@ def main():
     port = free_port()
     env = dict(os.environ, PYTHONIOENCODING='utf-8')
     env['PYTHONPATH'] = str(SERVER_DIR) + os.pathsep + env.get('PYTHONPATH', '')
+    env['UNIVERTER_NO_AUTOINSTALL'] = '1'          # тесты не должны запускать pip в фоне
     proc = subprocess.Popen(
         [sys.executable, str(SERVER), '--port', str(port)],
         cwd=str(SERVER_DIR), env=env,
@@ -91,6 +92,12 @@ def main():
             err = proc.stderr.read().decode('utf-8', 'replace') if proc.stderr else ''
             print('✗ сервис не поднялся\n' + err[:800])
             return 1
+
+        code, _, body = call(port, '/health')
+        j = json.loads(body.decode('utf-8'))
+        check('health: install-статусы присутствуют',
+              isinstance(j.get('install'), dict) and 'pdf2docx' in j['install'] and 'indra_ocr' in j['install'],
+              f"install={j.get('install')}")
 
         print('Origin: разрешённые')
         for origin in (f'http://127.0.0.1:{port}', f'http://localhost:{port}'):

@@ -999,15 +999,16 @@ function getCurrentRules() {
   return formatRules[key] || formatRules['all-md'];
 }
 
-async function handleFiles(files) {
+async function handleFiles(files, source) {
   if (isProcessing) { alert('Дождитесь окончания обработки'); return; }
   if (convertedFiles.length && !confirm('Добавление файлов сбросит готовые результаты. Продолжить?')) return;
   const seen = new Set();
   allFiles = Array.from(files || []).filter(f => {
-    const k = `${f.webkitRelativePath || ''}|${f.name}|${f.size}|${f.lastModified}`;
+    const k = `${f.webkitRelativePath || f.__relPath || ''}|${f.name}|${f.size}|${f.lastModified}`;
     if (seen.has(k)) return false;
     seen.add(k); return true;
   });
+  if (source === 'folder') showFolderPreview(allFiles);   // панель «что внутри выбранной папки»
   await rebuildFileList();
 }
 
@@ -2391,13 +2392,109 @@ async function createPdfFromOps(pages, { landscape = false } = {}) {
 }
 
 /* ============================================================
+   Превью содержимого выбранной папки (#folderPreview).
+   Панель опциональна: без элемента в HTML всё работает как раньше.
+   ============================================================ */
+const FP_ROW_LIMIT = 200;                     // длинные списки не заваливаем: хвост — строкой «…и ещё N»
+
+function folderPreviewPaths(f) {
+  const rel = f.webkitRelativePath || f.__relPath || '';
+  const i = rel.lastIndexOf('/');
+  return { rel, dir: i >= 0 ? rel.slice(0, i) : '', root: rel.split('/')[0] || '' };
+}
+
+function hideFolderPreview() {
+  const el = document.getElementById('folderPreview');
+  if (el) { el.hidden = true; el.textContent = ''; }
+}
+
+function showFolderPreview(files) {
+  const el = document.getElementById('folderPreview');
+  if (!el) return;
+  const items = (files || []).map(f => ({ f, ...folderPreviewPaths(f) })).filter(it => it.rel);
+  if (!items.length) { hideFolderPreview(); return; }
+
+  // Сводка по правилам текущего режима — только по расширению, без «сниффинга» содержимого:
+  // точный вердикт по каждому файлу всё равно показывает очередь ниже.
+  const rules = getCurrentRules();
+  const buckets = { convert: 0, copy: 0, keep: 0, ignored: 0, unknown: 0 };
+  let totalSize = 0;
+  for (const it of items) {
+    totalSize += it.f.size || 0;
+    const ext = detectFileType(it.f);
+    if (!ext) buckets.unknown++;
+    else if (rules.convert.includes(ext)) buckets.convert++;
+    else if (rules.copy.includes(ext)) buckets.copy++;
+    else if (rules.keepAsIs && rules.keepAsIs.includes(ext)) buckets.keep++;
+    else buckets.ignored++;
+  }
+
+  const groups = new Map();
+  for (const it of items) {
+    if (!groups.has(it.dir)) groups.set(it.dir, []);
+    groups.get(it.dir).push(it);
+  }
+
+  el.textContent = '';                          // только DOM-API: имена файлов — недоверенные данные
+  const roots = [...new Set(items.map(it => it.root))];
+  const h = document.createElement('h4');
+  h.textContent = (roots.length === 1 ? `Содержимое папки «${roots[0]}»` : `Содержимое папок (${roots.length})`) +
+    ` — файлов: ${items.length}, ${formatBytes(totalSize)}`;
+  el.appendChild(h);
+
+  const summary = [`в конвертацию: ${buckets.convert}`, `копирование: ${buckets.copy}`];
+  if (buckets.keep) summary.push(`без изменений: ${buckets.keep}`);
+  if (buckets.ignored) summary.push(`не подходит: ${buckets.ignored}`);
+  if (buckets.unknown) summary.push(`расширение проверится по содержимому: ${buckets.unknown}`);
+  const s = document.createElement('div');
+  s.className = 'fp-summary';
+  s.textContent = summary.join(' · ');
+  el.appendChild(s);
+
+  let shown = 0, extra = 0;
+  for (const dir of [...groups.keys()].sort()) {
+    const g = document.createElement('div');
+    const gt = document.createElement('div');
+    gt.className = 'fp-group-title';
+    gt.textContent = dir || 'в корне папки';
+    g.appendChild(gt);
+    for (const it of groups.get(dir)) {
+      if (shown >= FP_ROW_LIMIT) { extra++; continue; }
+      const row = document.createElement('div');
+      row.className = 'fp-file';
+      const name = document.createElement('span');
+      name.textContent = it.rel;
+      const size = document.createElement('span');
+      size.className = 'fp-size';
+      size.textContent = formatBytes(it.f.size || 0);
+      row.append(name, size);
+      g.appendChild(row);
+      shown++;
+    }
+    el.appendChild(g);
+  }
+  if (extra) {
+    const more = document.createElement('div');
+    more.className = 'fp-more';
+    more.textContent = `… и ещё ${extra} — полный список в очереди ниже`;
+    el.appendChild(more);
+  }
+  el.hidden = false;
+}
+
+/* ============================================================
    Чтение папок / URL
    ============================================================ */
 function readEntry(entry, files) {
   return new Promise((resolve) => {
     if (!entry) return resolve();
     if (entry.isFile) {
-      entry.file(f => { files.push(f); resolve(); }, err => { console.warn('Не удалось прочитать файл', entry.fullPath, err); resolve(); });
+      entry.file(f => {
+        // Брошенные мышью файлы теряют webkitRelativePath — сохраняем путь из entry.fullPath
+        const p = (entry.fullPath || '').replace(/^\//, '');
+        if (p.includes('/')) f.__relPath = p;
+        files.push(f); resolve();
+      }, err => { console.warn('Не удалось прочитать файл', entry.fullPath, err); resolve(); });
       return;
     }
     if (!entry.isDirectory) return resolve();
@@ -2450,6 +2547,7 @@ function clearAll() {
   }
   allFiles = []; filesToProcess = []; convertedFiles = [];
   fileList.innerHTML = '';
+  hideFolderPreview();
   fileInput.value = ''; folderInput.value = '';
   overallProgress.classList.remove('active');
   progressBarFill.style.width = '0%';
@@ -2514,7 +2612,7 @@ folderInput.addEventListener('change', async (e) => {
   const list = Array.from(e.target.files || []);
   e.target.value = '';
   if (!list.length) return;
-  await handleFiles(allFiles.concat(list));
+  await handleFiles(allFiles.concat(list), 'folder');
 });
 
 dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
@@ -2525,15 +2623,17 @@ dropZone.addEventListener('drop', async (e) => {
   if (isProcessing) { alert('Идёт обработка'); return; }
   const files = [];
   const items = e.dataTransfer.items;
+  let folderDrop = false;
   if (items && items.length && items[0].webkitGetAsEntry) {
     const entries = [];
     for (const item of items) { const entry = item.webkitGetAsEntry(); if (entry) entries.push(entry); }
+    folderDrop = entries.some(en => en.isDirectory);
     for (const entry of entries) await readEntry(entry, files);
   } else {
     for (const f of e.dataTransfer.files) files.push(f);
   }
   if (files.length) {
-    await handleFiles(allFiles.concat(files));
+    await handleFiles(allFiles.concat(files), folderDrop ? 'folder' : undefined);
   } else if (items && items.length) {
     alert('Не удалось прочитать перетащенные файлы.\n' +
           'В Firefox папки не поддерживаются — используйте кнопку «Добавить папку».');

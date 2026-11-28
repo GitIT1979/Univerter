@@ -213,11 +213,16 @@ function renderHelperStatus() {
     el.style.color = 'var(--warn)';
     return;
   }
-  const ocr = !helperInfo.indra ? '✗ OCR (Indra не установлена: py install_indra.py)'
-    : helperInfo.indra_state === 'error' ? `✗ OCR (Indra: ${helperInfo.indra_error || 'ошибка загрузки'})`
-    : helperInfo.indra_state === 'ready' ? 'OCR (Indra) ✓' : '⏳ OCR (Indra загружается, при первом запуске скачивается модель)';
+  const inst = helperInfo.install || {};       // статусы автоустановки пакетов движком (см. /health)
+  const ocr = helperInfo.indra
+    ? (helperInfo.indra_state === 'error' ? `✗ OCR (Indra: ${helperInfo.indra_error || 'ошибка загрузки'})`
+      : helperInfo.indra_state === 'ready' ? 'OCR (Indra) ✓'
+      : '⏳ OCR (Indra загружается, при первом запуске скачивается модель)')
+    : inst.indra_ocr === 'installing' ? '⏳ OCR (ставлю indra-ocr…)'
+    : inst.indra_ocr === 'failed' ? '✗ OCR (не удалось поставить indra-ocr — подробности в консоли движка)'
+    : '✗ OCR (Indra не установлена: py install_indra.py)';
   const parts = [`DOCX→PDF ${helperInfo.soffice ? '✓' : '✗ (нет LibreOffice)'}`,
-                 `PDF→DOCX ${helperInfo.pdf2docx ? '✓' : '✗ (нет pdf2docx)'}`, ocr];
+                 `PDF→DOCX ${helperInfo.pdf2docx ? '✓' : inst.pdf2docx === 'installing' ? '⏳ ставлю pdf2docx…' : '✗ (нет pdf2docx)'}`, ocr];
   el.textContent = `🟢 Локальный движок подключён: ${parts.join(', ')}`;
   el.style.color = (helperInfo.indra && helperInfo.indra_state === 'ready') ? 'var(--ok)' : 'var(--warn)';
 }

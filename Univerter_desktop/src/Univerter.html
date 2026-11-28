@@ -108,6 +108,13 @@ h3{margin:14px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06e
 .progress-bar{height:8px;background:#e6f5ea;border-radius:5px;overflow:hidden}
 .progress-bar-fill{height:100%;width:0;background:var(--accent);transition:width .25s}
 .progress-current{font-size:12px;color:var(--muted);margin-top:6px;word-break:break-all}
+.folder-preview{border:1px solid var(--line);border-radius:8px;background:var(--tile);padding:10px 12px;margin-bottom:10px;font-size:13px}
+.folder-preview h4{margin:0 0 6px;font-size:13px}
+.folder-preview .fp-summary{color:var(--muted);margin-bottom:4px}
+.folder-preview .fp-group-title{font-weight:600;margin:8px 0 2px;word-break:break-all}
+.folder-preview .fp-file{display:flex;justify-content:space-between;gap:10px;word-break:break-all}
+.folder-preview .fp-size{color:var(--muted);white-space:nowrap}
+.folder-preview .fp-more{color:var(--muted);margin-top:4px}
 .file-list{list-style:none;margin:0;padding:0}
 .file-list li{border:1px solid var(--line);border-left-width:4px;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--tile)}
 .file-list li.converted{border-left-color:var(--accent)}
@@ -249,6 +256,8 @@ h3{margin:14px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06e
       <div class="progress-bar"><div id="progressBarFill" class="progress-bar-fill"></div></div>
       <div id="progressCurrentFile" class="progress-current"></div>
     </div>
+
+    <div id="folderPreview" class="folder-preview" hidden></div>
 
     <ul id="fileList" class="file-list"></ul>
 

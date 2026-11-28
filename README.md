@@ -6,7 +6,7 @@
 | Папка | Что это | Запуск |
 |---|---|---|
 | `Univerter_HTML/` | браузерная версия + локальный Python-движок | `cd Univerter_HTML` → `.\setup.bat` (один раз) → `.\Univerter.bat` |
-| `Univerter_desktop/` | Electron-оболочка (Windows/macOS/Linux) | `cd Univerter_desktop` → `.\Univerter.bat` |
+| `Univerter_desktop/` | Electron-оболочка (Windows/macOS/Linux) | `cd Univerter_desktop` → `.\Univerter.bat` — интерфейс + локальный движок одним файлом |
 
 `Univerter.bat` — для Windows (двойной клик или из терминала). На macOS/Linux запускайте
 вручную, команды — в README соответствующей папки.
@@ -26,7 +26,9 @@
 
 - Python 3.10+ (для движка), Node.js 20+ (только для Electron-сборки).
 - LibreOffice — для DOCX → PDF с точной вёрсткой.
-- Опционально: `pdf2docx` — для PDF → DOCX, `indra-ocr` — для OCR.
+- `pdf2docx` и `indra-ocr` движок ставит сам при первом запуске (один раз нужен интернет,
+  веса Indra ~76 МБ качаются при первой загрузке модели). Отключается переменной
+  `UNIVERTER_NO_AUTOINSTALL=1`; офлайн-путь — `setup.bat` + `install_indra.py`.
 
 ## Проверки
 

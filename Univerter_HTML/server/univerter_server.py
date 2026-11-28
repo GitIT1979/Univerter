@@ -22,6 +22,7 @@ import json
 import os
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -54,6 +55,12 @@ CFG = {'soffice': None, 'extra_origins': [], 'timeout': 180, 'verbose': False}
 VERSION = 4                     # 4: потоковая загрузка + структурная проверка DOCX/PDF
 INDRA = {'conv': None, 'state': 'idle', 'error': '', 'lock': threading.Lock()}   # idle → loading → ready | error
 OCR_LOCK = threading.Lock()                                                     # распознаём по одной странице
+# Автоустановка недостающих pip-пакетов при старте: present → installing → installed | failed.
+# UNIVERTER_NO_AUTOINSTALL=1 отключает её (тесты, офлайн-машин с предустановленными пакетами).
+AUTOINSTALL_PINS = {'pdf2docx': 'pdf2docx>=0.5.13,<0.6', 'indra_ocr': 'indra-ocr>=0.1.0'}
+PIP_TIMEOUT = 600
+INSTALL = {'lock': threading.Lock(), 'error': '',
+           **{m: ('present' if importlib.util.find_spec(m) is not None else 'missing') for m in AUTOINSTALL_PINS}}
 
 
 LOCAL_HOSTS = {'127.0.0.1', 'localhost', '::1'}
@@ -93,7 +100,57 @@ def capabilities():
         'indra': importlib.util.find_spec('indra_ocr') is not None,        # OCR (Indra)
         'indra_state': INDRA['state'] if importlib.util.find_spec('indra_ocr') is not None else 'missing',
         'indra_error': INDRA['error'],
+        'install': {m: INSTALL[m] for m in AUTOINSTALL_PINS},              # статусы автоустановки
+        'install_error': INSTALL['error'],
     }
+
+
+def _pip_install(spec):
+    """Ставит пакет pip'ом того же интерпретатора. None — успех, иначе текст ошибки."""
+    try:
+        r = subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-input', spec],
+                           capture_output=True, text=True, timeout=PIP_TIMEOUT,
+                           encoding='utf-8', errors='replace')
+    except FileNotFoundError:
+        return 'pip не найден в этом Python'
+    except subprocess.TimeoutExpired:
+        return f'pip не ответил за {PIP_TIMEOUT} с'
+    if r.returncode != 0:
+        tail = (r.stderr or r.stdout or '').strip().splitlines()[-3:]
+        return '; '.join(tail) or f'pip завершился с кодом {r.returncode}'
+    return None
+
+
+def ensure_packages():
+    """Ставит недостающие пакеты, затем прогревает Indra (веса ~76 МБ качаются при первой загрузке).
+
+    Выполняется в фоновом потоке: сервер обязан начать отвечать на /health сразу,
+    не дожидаясь конца установки. Провал не роняет сервис — работает деградация
+    (/convert → 500, /ocr → 503 с подсказкой), как и при отсутствии пакетов раньше.
+    """
+    if os.environ.get('UNIVERTER_NO_AUTOINSTALL') == '1':
+        return
+    with INSTALL['lock']:
+        for mod, spec in AUTOINSTALL_PINS.items():
+            if importlib.util.find_spec(mod) is not None:
+                INSTALL[mod] = 'present'
+                continue
+            INSTALL[mod] = 'installing'
+            print(f'[deps] Ставлю {spec} (это может занять пару минут)…', flush=True)
+            err = _pip_install(spec)
+            importlib.invalidate_caches()                  # pip дописал в site-packages уже после старта
+            if err or importlib.util.find_spec(mod) is None:
+                INSTALL[mod] = 'failed'
+                INSTALL['error'] = f'{mod}: {err or "пакет не найден даже после установки"}'
+                print(f'[deps] ✗ {INSTALL["error"]}', flush=True)
+            else:
+                INSTALL[mod] = 'installed'
+                print(f'[deps] ✓ {mod} установлен', flush=True)
+    if importlib.util.find_spec('indra_ocr') is not None:
+        try:
+            load_indra()
+        except Exception as e:
+            print(f'⚠ Indra не загрузилась: {e}', flush=True)
 
 
 def _validate_docx(path):
@@ -472,14 +529,10 @@ def main():
     url = f'http://127.0.0.1:{a.port}/' if a.host in ('127.0.0.1', 'localhost') else f'http://{a.host}:{a.port}/'
     print(f'Univerter local engine: {url}', flush=True)
     print(f'  DOCX -> PDF (LibreOffice): {"✓ " + CFG["soffice"] if caps["soffice"] else "✗ LibreOffice не найден"}')
-    print(f'  PDF -> DOCX (pdf2docx):    {"✓" if caps["pdf2docx"] else "✗ pip install pdf2docx"}')
-    print(f'  OCR (Indra):               {"✓ установлена (модель загружается в фоне)" if caps["indra"] else "✗ py install_indra.py"}', flush=True)
+    print(f'  PDF -> DOCX (pdf2docx):    {"✓" if caps["pdf2docx"] else "⏳ ставится в фоне (pip)"}')
+    print(f'  OCR (Indra):               {"✓ установлена (модель загружается в фоне)" if caps["indra"] else "⏳ ставится в фоне (pip), после скачаются веса"}', flush=True)
     print('Окно не закрывайте, пока работаете в Univerter. Остановить: Ctrl+C', flush=True)
-    if caps['indra']:                                                  # прогрев модели, чтобы первая картинка не ждала
-        def _warm():
-            try: load_indra()
-            except Exception as e: print(f'⚠ Indra не загрузилась: {e}', flush=True)
-        threading.Thread(target=_warm, daemon=True).start()
+    threading.Thread(target=ensure_packages, daemon=True, name='autoinstall').start()
     threading.Timer(0.5, self_check, args=(a.port,)).start()
     if a.open:
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
