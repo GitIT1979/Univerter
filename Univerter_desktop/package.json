@@ -25,6 +25,7 @@
     "copyright": "Univerter",
     "directories": { "output": "dist", "buildResources": "build" },
     "files": [ "main.js", "preload.js", "lib/**", "src/**", "package.json" ],
+    "extraResources": [ { "from": "engine", "to": "engine" } ],
     "asar": true,
     "win": {
       "icon": "build/icon.png",

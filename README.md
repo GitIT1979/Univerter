@@ -48,6 +48,7 @@ Univerter_HTML/
 Univerter_desktop/
 ├── main.js, preload.js, lib/server.js   # Electron-оболочка и статический сервер
 ├── src/                                 # копия web/ (интерфейс + vendor)
+├── engine/                              # копия server/ — движок в составе установщика
 └── Univerter.bat, package.json
 tests/              # load-app.js, test_server_origin.py, run_tests.py (Playwright)
 ```

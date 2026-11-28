@@ -10,12 +10,12 @@
 ```
 ┌─────────────────────┐         ┌──────────────────────────┐
 │   Electron          │         │   Python-сервер          │
-│   (Univerter_desktop)│         │   (папка Univerter)      │
+│   (Univerter_desktop)│         │   (встроен в установщик) │
 │                     │         │                          │
 │  main.js            │         │  univerter_server.py     │
-│    └─ lib/server.js │         │    ├─ /health            │
-│       (порт 47821)  │         │    ├─ /ocr  ← Indra      │
-│                     │         │    └─ /convert           │
+│    ├─ startEngine…  ├────────►│    ├─ /health            │
+│    └─ lib/server.js │  spawn  │    ├─ /ocr  ← Indra      │
+│       (порт 47821)  │         │    └─ /convert           │
 │  BrowserWindow      │  HTTP   │                          │
 │    └─ src/          │◄───────►│  Indra OCR               │
 │       Univerter.html│  :8765  │  LibreOffice + pdf2docx  │
@@ -23,7 +23,8 @@
 ```
 
 1. **Electron** запускает свой статический сервер и открывает `Univerter.html` в окне.
-2. Страница периодически опрашивает `http://127.0.0.1:8765/health`.
+2. Приложение проверяет `http://127.0.0.1:8765/health`: движок не отвечает — запускает его сами
+   (в упакованном приложении — из `resources\engine`, в репозитории — из `../Univerter_HTML`).
 3. Если Python-сервер запущен и Indra установлена, в интерфейсе появляется статус  
    **«OCR (Indra) ✓»**.
 4. Распознавание картинок и сканов идёт запросом `POST /ocr` → Indra.  
@@ -38,6 +39,18 @@ Electron и Indra не связаны напрямую. Electron — тольк�
 
 Интерфейс и библиотеки лежат в `src/` этого проекта (копия `Univerter_HTML/web`).
 Сеть для работы не нужна: pdf.js, JSZip, jsPDF, mammoth, Turndown и SheetJS лежат в `src/vendor/`.
+
+### Установленное приложение — полный режим
+
+Установщик кладёт движок в `resources\engine`. Установленный `Univerter.exe` при старте сам
+поднимает движок на `127.0.0.1:8765`, если тот ещё не работает, и завершает его при выходе.
+
+- Нужен установленный Python 3.10+ (`py` или `python` в PATH); недостающие пакеты
+  (`pdf2docx`, `indra-ocr`) и веса Indra движок ставит сам при первом запуске — один раз нужен интернет.
+- Лог движка: `%APPDATA%\Univerter\engine.log` (консоль движка скрыта намеренно).
+- Если движок на 8765 уже запущен (например, вручную из `Univerter_HTML`), приложение
+  использует его и при выходе не завершает.
+- Если Python не найден — интерфейс работает без OCR и точного DOCX↔PDF.
 
 ### Вариант A — только интерфейс (без OCR)
 
@@ -109,6 +122,8 @@ npm run dist:win
 - `win-unpacked\Univerter.exe` — распакованное приложение.
 
 Сборка не подписана: при первом запуске Windows может показать предупреждение SmartScreen.
+Движок кладётся в установку целиком (`extraResources: engine`), копия обязана совпадать с
+`Univerter_HTML/server` — это проверяет `tests/load-app.js`.
 
 ### Если сборка падает на winCodeSign
 

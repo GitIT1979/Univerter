@@ -69,6 +69,16 @@ for (const name of VENDOR) {
 const external = html.match(/<script[^>]+src="https?:\/\/[^"]+"/g);
 if (external) fail(`в HTML остались внешние скрипты: ${external.length}`);
 
+// 5. Копия движка для установщика обязана совпадать с Univerter_HTML/server
+// (упакованный Univerter.exe стартует движок из resources/engine — см. main.js)
+const ENGINE_COPY = path.join(__dirname, '..', 'Univerter_desktop', 'engine', 'server');
+for (const name of ['univerter_server.py', 'univerter_fidelity.py']) {
+  const a = path.join(__dirname, '..', 'Univerter_HTML', 'server', name);
+  const b = path.join(ENGINE_COPY, name);
+  if (!fs.existsSync(b)) { fail(`нет копии ${name} в Univerter_desktop/engine/server`); continue; }
+  if (!fs.readFileSync(a).equals(fs.readFileSync(b))) fail(`${name} разошёлся между Univerter_HTML/server и desktop/engine/server`);
+}
+
 // 5. Батники Windows: CRLF и без BOM — иначе cmd парсит их со сбоями
 // (на LF-файле с кириллицей возобновляется посреди строки и исполняет обрывки текста)
 function collectBats(dir, out = []) {
